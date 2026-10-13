@@ -1,4 +1,2 @@
 streamlit>=1.50
 pandas>=2.2
-matplotlib>=3.8
-seaborn>=0.13

@@ -1,170 +1,286 @@
-"""Random Hostname Generator - Streamlit app.
+"""Hostname Generator - Streamlit app (Swiss minimalist design).
 
 Run locally:   streamlit run app/streamlit_app.py
 """
-import matplotlib.pyplot as plt
-import seaborn as sns
+import html
+import json
+
 import streamlit as st
+import streamlit.components.v1 as components
 
 import hostnames as hn
 
-st.set_page_config(page_title="Hostname Generator", page_icon="🖥️", layout="wide")
+st.set_page_config(page_title="Hostname Generator", layout="centered",
+                   initial_sidebar_state="collapsed")
 
-# Colors taken from the notebook
-OS_COLORS = {"Linux": "#4655AE", "Solaris": "#F9734F", "AIX": "#6E56A0", "HP-UX": "#F25D71"}
-ENV_COLORS = {"Development": "#F19A21", "Integration": "#F32A78", "Production": "#4655AE",
-              "Staging": "#00ABD7", "Testing": "#9ACA29"}
-COUNTRY_COLORS = {"Norway": "#9ACA29", "Germany": "#F32A78", "Italy": "#813696",
-                  "Spain": "#00ABD7", "Ireland": "#F9734F", "France": "#012290"}
+ACCENT = "#1F4D33"
+INK = "#111111"
+MUTED = "#6E6E6A"
+RULE = "#E4E4E0"
+FONT = "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif"
+MONO = "'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace"
+FONT_IMPORT = ("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700"
+               "&family=JetBrains+Mono:wght@400;500&display=swap")
 
-# ---------------- Sidebar ----------------
-st.sidebar.header("⚙️ Settings")
-n_hosts = st.sidebar.slider("Number of hostnames", 100, 10_000, 1500, step=100)
-seed = st.sidebar.number_input("Random seed (0 = random)", min_value=0, value=0, step=1)
-if st.sidebar.button("🔄 Generate new hostnames", width="stretch"):
-    st.session_state.pop("df", None)
+# --------------------------------------------------------------------------- styles
+st.markdown(f"""
+<style>
+@import url('{FONT_IMPORT}');
 
-key = (n_hosts, seed)
-if st.session_state.get("key") != key or "df" not in st.session_state:
-    if seed:
-        hn.random.seed(seed)
-    st.session_state.df = hn.build_dataframe(n_hosts)
-    st.session_state.key = key
-df = st.session_state.df
+html, body, .stApp, .stApp p, .stApp label, .stApp input, .stApp button,
+.stApp h1, .stApp h2, .stApp h3, .stApp div {{ font-family: {FONT}; }}
 
-# ---------------- Header ----------------
-st.title("🖥️ Random Hostname Generator")
-st.markdown(
-    "Hostnames of 8 characters: **OS** (1) + **Environment** (2) + **Country** (3–5) + **Node** (6–8). "
-    "Example: `AIGER789` → AIX | Integration | Germany | Node 789"
-)
+header[data-testid="stHeader"], #MainMenu, footer,
+[data-testid="stSidebarCollapsedControl"] {{ display: none !important; }}
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Total hosts", f"{len(df):,}")
-c2.metric("Top OS", df["os"].mode()[0])
-c3.metric("Top environment", df["environment"].mode()[0])
-c4.metric("Top country", df["country"].mode()[0])
+.block-container {{ max-width: 880px; padding-top: 4.5rem; padding-bottom: 6rem; }}
 
-tab_data, tab_charts, tab_decode, tab_rules = st.tabs(
-    ["📋 Data", "📊 Charts", "🔍 Decode a hostname", "📐 Rules"])
+/* Typography */
+.eyebrow {{ font-size: .72rem; font-weight: 600; letter-spacing: .14em;
+           text-transform: uppercase; color: {ACCENT}; margin: 0 0 1.1rem; }}
+.title {{ font-size: 3.1rem; font-weight: 700; line-height: 1.02; letter-spacing: -.035em;
+          color: {INK}; margin: 0; }}
+.lede {{ font-size: 1.02rem; line-height: 1.6; color: {MUTED}; max-width: 34rem;
+         margin: 1.2rem 0 0; }}
+.lede code {{ font-family: {MONO}; font-size: .92em; color: {INK};
+              background: none; padding: 0; }}
 
-# ---------------- Data ----------------
-with tab_data:
-    f1, f2, f3 = st.columns(3)
-    os_f = f1.multiselect("OS", sorted(df["os"].unique()))
-    env_f = f2.multiselect("Environment", sorted(df["environment"].unique()))
-    ctry_f = f3.multiselect("Country", sorted(df["country"].unique()))
-    view = df
-    if os_f:
-        view = view[view["os"].isin(os_f)]
-    if env_f:
-        view = view[view["environment"].isin(env_f)]
-    if ctry_f:
-        view = view[view["country"].isin(ctry_f)]
-    st.caption(f"Showing {len(view):,} of {len(df):,} hosts")
-    st.dataframe(view, width="stretch", hide_index=True, height=420)
-    st.download_button("⬇️ Download hosts.csv", view.to_csv(index=False).encode(),
-                       "hosts.csv", "text/csv")
+.section {{ display: grid; grid-template-columns: 3rem 1fr; align-items: baseline;
+            border-top: 2px solid {INK}; padding-top: .9rem; margin: 3.6rem 0 1.6rem; }}
+.section .num {{ font-size: .75rem; font-weight: 600; color: {ACCENT};
+                 font-variant-numeric: tabular-nums; }}
+.section .name {{ font-size: .75rem; font-weight: 600; letter-spacing: .14em;
+                  text-transform: uppercase; color: {INK}; }}
 
-# ---------------- Charts ----------------
-with tab_charts:
-    st.subheader("Distribution of Hosts by Country and Environment")
-    fig, ax = plt.subplots(figsize=(14, 6))
-    env_by_country = df.groupby(["country", "environment"]).size().unstack()
-    env_by_country.plot(kind="bar", color=ENV_COLORS, edgecolor="white", ax=ax)
-    ax.set_xlabel("")
-    ax.set_ylabel("Number of Hosts", fontweight="bold")
-    ax.tick_params(axis="x", rotation=45)
-    ax.legend(title="Environment", shadow=True)
-    ax.grid(axis="y", alpha=0.5, linestyle="--")
-    fig.tight_layout()
-    st.pyplot(fig)
+/* Form */
+[data-testid="stForm"] {{ border: none; padding: 0; }}
+.stApp label p {{ font-size: .72rem !important; font-weight: 600; letter-spacing: .1em;
+                  text-transform: uppercase; color: {MUTED}; }}
+.stApp input {{ font-size: 1rem !important; }}
+[data-testid="stTextInputRootElement"], [data-testid="stNumberInputContainer"] {{
+    height: 2.9rem; background: #fff !important; }}
+[data-testid="stTextInputRootElement"] input, [data-testid="stNumberInputContainer"] input,
+[data-testid="stNumberInputContainer"] button {{ background: #fff !important; }}
+[data-testid="stTextInputRootElement"]:focus-within,
+[data-testid="stNumberInputContainer"]:focus-within {{ border-color: {ACCENT} !important; }}
+.stTextInput input {{ font-family: {MONO} !important; letter-spacing: .06em;
+                      text-transform: uppercase; }}
+.stTextInput input::placeholder {{ text-transform: none; letter-spacing: 0;
+                                   font-family: {FONT}; color: #A9A9A4; }}
+[data-testid="stWidgetLabel"] {{ min-height: 0; margin-bottom: .35rem; }}
+[data-testid="stCaptionContainer"] p {{ color: {MUTED}; font-size: .8rem; }}
 
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.subheader("Operating Systems by Country")
-        fig, ax = plt.subplots(figsize=(8, 6))
-        df.groupby(["country", "os"]).size().unstack().plot(
-            kind="barh", stacked=True, color=OS_COLORS, edgecolor="white", ax=ax)
-        ax.set_xlabel("Number of hosts", fontweight="bold")
-        ax.set_ylabel("")
-        ax.legend(title="Operating System", shadow=True)
-        ax.grid(axis="x", alpha=0.5)
-        fig.tight_layout()
-        st.pyplot(fig)
+.stFormSubmitButton button, .stDownloadButton button {{
+    height: 2.9rem; font-size: .78rem; font-weight: 600; letter-spacing: .12em;
+    text-transform: uppercase; }}
+.stFormSubmitButton button p, .stDownloadButton button p {{
+    font-size: .78rem !important; font-weight: 600 !important; letter-spacing: .12em;
+    text-transform: uppercase !important; }}
+.stFormSubmitButton button {{ background: {ACCENT}; border-color: {ACCENT}; color: #fff; }}
+.stFormSubmitButton button:hover {{ background: #163A26; border-color: #163A26; color: #fff; }}
+.stDownloadButton button {{ background: #fff; color: {INK}; border: 1px solid {INK}; }}
+.stDownloadButton button:hover {{ background: {INK}; color: #fff; border-color: {INK}; }}
 
-        st.subheader("Hosts by Country")
-        counts = df["country"].value_counts().reset_index()
-        counts.columns = ["country", "count"]
-        fig, ax = plt.subplots(figsize=(8, 6))
-        sns.barplot(data=counts, y="country", x="count", hue="country",
-                    legend=False, palette="rocket", ax=ax)
-        for i, v in enumerate(counts["count"]):
-            ax.text(v + 5, i, str(v), va="center", fontweight="bold")
-        ax.set_xlim(0, counts["count"].max() * 1.12)
-        ax.set_xlabel("Number of hosts", fontweight="bold")
-        ax.set_ylabel("")
-        ax.grid(axis="x", alpha=0.5)
-        fig.tight_layout()
-        st.pyplot(fig)
+/* Notices */
+.notice {{ border-left: 2px solid {ACCENT}; padding: .2rem 0 .2rem 1rem; color: {INK};
+           font-size: .92rem; margin: 1rem 0; }}
+.notice.error {{ border-color: #B3261E; }}
 
-    with col_b:
-        st.subheader("Total Operating Systems")
-        os_counts = df.groupby("os").size()
-        fig, ax = plt.subplots(figsize=(8, 6))
-        os_counts.plot(kind="pie", autopct="%1.1f%%", ax=ax, startangle=90, shadow=True,
-                       colors=[OS_COLORS[o] for o in os_counts.index],
-                       wedgeprops={"edgecolor": "white", "linewidth": 2},
-                       textprops={"fontsize": 10, "fontweight": "bold"})
-        ax.set_ylabel("")
-        fig.tight_layout()
-        st.pyplot(fig)
+/* Distribution */
+.dist h4 {{ font-size: .72rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+            color: {MUTED}; margin: 0 0 1rem; padding: 0; }}
+.bar-row {{ display: grid; grid-template-columns: 1fr auto; font-size: .86rem; color: {INK};
+            margin-bottom: .2rem; }}
+.bar-row span:last-child {{ font-variant-numeric: tabular-nums; color: {MUTED}; }}
+.bar {{ height: 3px; background: {RULE}; margin-bottom: .85rem; }}
+.bar > div {{ height: 3px; background: {ACCENT}; }}
 
-        st.subheader("Hosts by Environment and Country")
-        fig, ax = plt.subplots(figsize=(8, 6))
-        df.groupby(["country", "environment"]).size().unstack(0).plot(
-            kind="bar", color=COUNTRY_COLORS, edgecolor="white", ax=ax)
-        ax.set_xlabel("")
-        ax.set_ylabel("Number of hosts", fontweight="bold")
-        ax.tick_params(axis="x", rotation=0)
-        ax.legend(title="Country", shadow=True)
-        ax.grid(axis="y", alpha=0.5)
-        fig.tight_layout()
-        st.pyplot(fig)
+.foot {{ margin-top: 5rem; padding-top: 1rem; border-top: 1px solid {RULE};
+         font-size: .75rem; color: {MUTED}; }}
+</style>
+""", unsafe_allow_html=True)
 
-    st.subheader("Expected vs. observed (%)")
-    rows = []
-    for col, codes in [("os", hn.OS_CODES), ("environment", hn.ENV_CODES),
-                       ("country", hn.COUNTRY_CODES)]:
-        obs = df[col].value_counts(normalize=True) * 100
-        for name, weight in codes.values():
-            rows.append({"Component": col, "Value": name, "Expected %": weight,
-                         "Observed %": round(obs.get(name, 0), 1)})
-    st.dataframe(rows, width="stretch", hide_index=True)
 
-# ---------------- Decode ----------------
-with tab_decode:
-    hostname = st.text_input("Enter a hostname", "AIGER789", max_chars=8).upper().strip()
-    if hostname:
-        if hn.is_valid(hostname):
-            d = hn.decode(hostname)
-            k1, k2, k3, k4 = st.columns(4)
-            k1.metric("OS", d["os"])
-            k2.metric("Environment", d["environment"])
-            k3.metric("Country", d["country"])
-            k4.metric("Node", f"{d['node']:03d}")
-            found = df[df["hostname"] == hostname]
-            st.info(f"This hostname appears {len(found)} time(s) in the current dataset.")
-        else:
-            st.error("Invalid hostname. Format: OS + Environment + Country + Node (e.g. LPIRL001).")
+def section(num: str, name: str) -> None:
+    st.markdown(f'<div class="section"><span class="num">{num}</span>'
+                f'<span class="name">{name}</span></div>', unsafe_allow_html=True)
 
-# ---------------- Rules ----------------
-with tab_rules:
-    st.markdown("""
-| Position | Component | Codes | Probability |
-|---|---|---|---|
-| 1 | OS | L (Linux), S (Solaris), A (AIX), H (HP-UX) | 40%, 30%, 20%, 10% |
-| 2 | Environment | D (Dev), I (Integration), T (Testing), S (Staging), P (Production) | 10%, 10%, 25%, 25%, 30% |
-| 3–5 | Country | NOR, FRA, ITA, ESP, GER, IRL | 6%, 9%, 16%, 16%, 23%, 30% |
-| 6–8 | Node | 001–999 | Uniform |
-""")
+
+def notice(text: str, error: bool = False) -> None:
+    cls = "notice error" if error else "notice"
+    st.markdown(f'<div class="{cls}">{text}</div>', unsafe_allow_html=True)
+
+
+def results_list(rows: list[dict], keyword: str) -> None:
+    """Hostname list with a Copy button per row, rendered as an HTML component."""
+    row_h, head_h, max_h = 57, 92, 640
+    height = min(head_h + row_h * len(rows) + 4, max_h)
+    data = json.dumps(rows)
+    kw = json.dumps(keyword)
+    components.html(f"""
+<!doctype html><html><head>
+<link href="{FONT_IMPORT}" rel="stylesheet">
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: {FONT}; color: {INK}; background: #fff; }}
+  .bar {{ display: flex; justify-content: space-between; align-items: center;
+          padding: 0 0 1rem; border-bottom: 1px solid {INK}; }}
+  .count {{ font-size: .86rem; color: {MUTED}; }}
+  .count b {{ color: {INK}; font-weight: 600; font-variant-numeric: tabular-nums; }}
+  .head, .row {{ display: grid; grid-template-columns: 2.6rem 8.4rem 1fr 5.6rem;
+                 align-items: center; column-gap: 1rem; }}
+  .head {{ font-size: .68rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+           color: {MUTED}; padding: .9rem 0 .6rem; border-bottom: 1px solid {RULE}; }}
+  .list {{ overflow-y: auto; max-height: {max_h - head_h}px; }}
+  .row {{ height: {row_h}px; border-bottom: 1px solid {RULE}; }}
+  .row:hover {{ background: #FAFAF8; }}
+  .idx {{ font-size: .75rem; color: #A9A9A4; font-variant-numeric: tabular-nums; }}
+  .host {{ font-family: {MONO}; font-size: 1rem; font-weight: 500; letter-spacing: .04em; }}
+  .host mark {{ background: none; color: {ACCENT}; font-weight: 600;
+                border-bottom: 2px solid {ACCENT}; }}
+  .meta {{ font-size: .82rem; color: {MUTED}; white-space: nowrap; overflow: hidden;
+           text-overflow: ellipsis; }}
+  .meta .sep {{ color: #C9C9C4; margin: 0 .45rem; }}
+  button {{ font-family: {FONT}; font-size: .68rem; font-weight: 600; letter-spacing: .12em;
+            text-transform: uppercase; height: 2rem; padding: 0 .9rem; cursor: pointer;
+            background: #fff; color: {INK}; border: 1px solid #CFCFCA;
+            transition: background .12s, color .12s, border-color .12s; }}
+  button:hover {{ border-color: {INK}; }}
+  button:focus-visible {{ outline: 2px solid {ACCENT}; outline-offset: 2px; }}
+  button.done {{ background: {ACCENT}; border-color: {ACCENT}; color: #fff; }}
+  .row button {{ justify-self: end; width: 5.6rem; }}
+  .primary {{ border-color: {INK}; }}
+  .sr {{ position: absolute; left: -9999px; }}
+  @media (max-width: 560px) {{
+    .head, .row {{ grid-template-columns: 2rem 1fr 5rem; }}
+    .meta, .head .m {{ display: none; }}
+    .row button {{ width: 5rem; }}
+  }}
+</style></head><body>
+<div class="bar">
+  <span class="count"><b id="n"></b> hostnames</span>
+  <button class="primary" id="all" aria-label="Copy all hostnames">Copy all</button>
+</div>
+<div class="head"><span>No.</span><span>Hostname</span><span class="m">OS / Environment / Country</span><span></span></div>
+<div class="list" id="list" role="list"></div>
+<div class="sr" aria-live="polite" id="live"></div>
+<script>
+const rows = {data}; const kw = {kw};
+const esc = s => s.replace(/[&<>"]/g, c => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}}[c]));
+function mark(h) {{
+  if (!kw) return esc(h);
+  const i = h.indexOf(kw);
+  if (i < 0) return esc(h);
+  return esc(h.slice(0, i)) + '<mark>' + esc(kw) + '</mark>' + esc(h.slice(i + kw.length));
+}}
+document.getElementById('n').textContent = rows.length.toLocaleString('en-US');
+document.getElementById('list').innerHTML = rows.map((r, i) => `
+  <div class="row" role="listitem">
+    <span class="idx">${{String(i + 1).padStart(2, '0')}}</span>
+    <span class="host">${{mark(r.hostname)}}</span>
+    <span class="meta">${{r.os}}<span class="sep">/</span>${{r.environment}}<span class="sep">/</span>${{r.country}}</span>
+    <button data-h="${{r.hostname}}" aria-label="Copy ${{r.hostname}}">Copy</button>
+  </div>`).join('');
+
+function fallbackCopy(text) {{
+  const t = document.createElement('textarea');
+  t.value = text; t.style.position = 'fixed'; t.style.opacity = '0';
+  document.body.appendChild(t); t.select();
+  let ok = false; try {{ ok = document.execCommand('copy'); }} catch (e) {{}}
+  document.body.removeChild(t); return ok;
+}}
+async function copy(text, btn, label) {{
+  let ok = false;
+  try {{ await navigator.clipboard.writeText(text); ok = true; }}
+  catch (e) {{ ok = fallbackCopy(text); }}
+  btn.textContent = ok ? 'Copied' : 'Failed';
+  btn.classList.toggle('done', ok);
+  document.getElementById('live').textContent = ok ? 'Copied to clipboard' : 'Copy failed';
+  setTimeout(() => {{ btn.textContent = label; btn.classList.remove('done'); }}, 1400);
+}}
+document.getElementById('list').addEventListener('click', e => {{
+  const b = e.target.closest('button'); if (b) copy(b.dataset.h, b, 'Copy');
+}});
+document.getElementById('all').addEventListener('click', e =>
+  copy(rows.map(r => r.hostname).join('\\n'), e.currentTarget, 'Copy all'));
+</script></body></html>
+""", height=height, scrolling=False)
+
+
+def distribution(df) -> None:
+    cols = st.columns(3, gap="large")
+    for col, (field, title, codes) in zip(cols, [
+            ("os", "Operating system", hn.OS_CODES),
+            ("environment", "Environment", hn.ENV_CODES),
+            ("country", "Country", hn.COUNTRY_CODES)]):
+        counts = df[field].value_counts()
+        total = len(df)
+        rows = []
+        for name, _ in sorted(codes.values(), key=lambda v: -counts.get(v[0], 0)):
+            c = int(counts.get(name, 0))
+            pct = 100 * c / total if total else 0
+            rows.append(f'<div class="bar-row"><span>{html.escape(name)}</span>'
+                        f'<span>{pct:.0f}%</span></div>'
+                        f'<div class="bar"><div style="width:{pct:.1f}%"></div></div>')
+        col.markdown(f'<div class="dist"><h4>{title}</h4>{"".join(rows)}</div>',
+                     unsafe_allow_html=True)
+
+
+# --------------------------------------------------------------------------- header
+st.markdown("""
+<p class="eyebrow">Infrastructure naming</p>
+<h1 class="title">Hostname<br>Generator</h1>
+<p class="lede">Eight characters, four parts: operating system, environment, country and node.
+<code>AIGER789</code> reads as AIX, Integration, Germany, node 789.</p>
+""", unsafe_allow_html=True)
+
+# --------------------------------------------------------------------------- 01 generate
+section("01", "Generate")
+with st.form("generate", border=False, enter_to_submit=True):
+    c1, c2, c3 = st.columns([3.2, 1.4, 1.4], vertical_alignment="bottom")
+    keyword = c1.text_input("Keyword", max_chars=8, placeholder="Optional, e.g. IRL, LP or 007")
+    quantity = c2.number_input("Quantity", min_value=1, max_value=5000, value=20, step=10)
+    submitted = c3.form_submit_button("Generate", type="primary", width="stretch")
+st.caption("The keyword is placed inside every hostname. Leave it empty for fully random names.")
+
+if submitted:
+    kw = hn.clean_keyword(keyword)
+    if not hn.is_possible(kw):
+        st.session_state.pop("result", None)
+        st.session_state.error = (f"No valid hostname can contain <b>{html.escape(kw)}</b>. "
+                                  "Try an OS or environment letter, a country code such as GER, or a node number.")
+    else:
+        st.session_state.pop("error", None)
+        st.session_state.result = {"df": hn.build_dataframe(int(quantity), kw),
+                                   "keyword": kw, "requested": int(quantity)}
+
+if "error" in st.session_state:
+    notice(st.session_state.error, error=True)
+
+# --------------------------------------------------------------------------- 02 results
+result = st.session_state.get("result")
+if result:
+    df, kw = result["df"], result["keyword"]
+    section("02", "Results")
+    if len(df) < result["requested"]:
+        notice(f"Only {len(df)} unique hostnames can contain <b>{html.escape(kw)}</b>; "
+               f"all of them are listed.")
+    results_list(df.to_dict(orient="records"), kw)
+
+    _, dl = st.columns([3, 1.4])
+    dl.download_button("Download CSV", df.to_csv(index=False).encode(),
+                       file_name=f"hostnames{'_' + kw if kw else ''}.csv",
+                       mime="text/csv", width="stretch")
+
+    section("03", "Distribution")
+    distribution(df)
+else:
+    section("02", "Results")
+    st.markdown(f'<p style="color:{MUTED};font-size:.92rem">No hostnames yet. '
+                'Set a keyword or leave it empty, then press Generate.</p>',
+                unsafe_allow_html=True)
+
+st.markdown('<div class="foot">Probabilities: OS L 40, S 30, A 20, H 10 &nbsp;/&nbsp; '
+            'Environment D 10, I 10, T 25, S 25, P 30 &nbsp;/&nbsp; '
+            'Country NOR 6, FRA 9, ITA 16, ESP 16, GER 23, IRL 30 &nbsp;/&nbsp; Node 001–999 uniform.</div>',
+            unsafe_allow_html=True)

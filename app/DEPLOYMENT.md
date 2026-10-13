@@ -3,6 +3,8 @@
 ## Project structure
 ```
 Hostnames_app/
+├── .streamlit/
+│   └── config.toml        # theme: white, forest green accent, square corners
 ├── app/
 │   ├── streamlit_app.py   # Streamlit interface
 │   ├── hostnames.py       # generator logic (from the notebook)
@@ -48,13 +50,14 @@ git push -u origin main
 Every `git push` to `main` updates the published app automatically.
 
 ## App features
-- Sidebar: number of hostnames (100–10,000), optional seed for reproducible results, regenerate button.
-- **Data**: table with filters by OS, environment, and country, plus CSV download.
-- **Charts**: the notebook charts, plus an expected-vs-observed percentage table.
-- **Decode**: type a hostname (e.g. `AIGER789`) to see its OS, environment, country, and node.
-- **Rules**: the hostname composition table.
+- Swiss minimalist layout: one column, numbered sections, generous white space, forest green (#1F4D33) accent.
+- **Keyword** (optional): fixed inside every hostname, e.g. `IRL`, `LP`, `007`. Impossible keywords show a clear message; very specific ones list every unique match.
+- **Quantity** (1–5,000) and **Generate** (Enter also works).
+- **Results**: numbered list with the keyword highlighted, a decoded description, a **Copy** button per row, **Copy all**, and **Download CSV**.
+- **Distribution**: share of each OS, environment, and country in the current result.
 
 ## Troubleshooting
+- The theme is not applied → `.streamlit/config.toml` must be at the repository root (inside `Hostnames_app/`, not inside `app/`).
 - `ModuleNotFoundError` on Streamlit Cloud → check that `requirements.txt` is inside `app/`, next to `streamlit_app.py`.
 - `ModuleNotFoundError: hostnames` → `hostnames.py` must be in the same folder as `streamlit_app.py`.
 - Port already in use locally → `streamlit run app/streamlit_app.py --server.port 8502`.
