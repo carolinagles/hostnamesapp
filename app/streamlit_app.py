@@ -61,6 +61,13 @@ header[data-testid="stHeader"], #MainMenu, footer,
     height: 2.9rem; background: #fff !important; }}
 [data-testid="stTextInputRootElement"] input, [data-testid="stNumberInputContainer"] input,
 [data-testid="stNumberInputContainer"] button {{ background: #fff !important; }}
+[data-testid="stNumberInputContainer"] button {{ display: none !important; }}
+[data-testid="stNumberInputContainer"] input {{ font-family: {MONO} !important; }}
+/* Quantity: typed only, no +/- steppers or 'Press Enter' hint */
+[data-testid="InputInstructions"] {{ display: none !important; }}
+[data-testid="stNumberInputStepDown"], [data-testid="stNumberInputStepUp"] {{ display: none !important; }}
+[data-testid="stNumberInputContainer"] input {{ font-family: {MONO} !important; }}
+
 [data-testid="stTextInputRootElement"]:focus-within,
 [data-testid="stNumberInputContainer"]:focus-within {{ border-color: {ACCENT} !important; }}
 .stTextInput input {{ font-family: {MONO} !important; letter-spacing: .06em;
@@ -239,9 +246,10 @@ section("01", "Generate")
 with st.form("generate", border=False, enter_to_submit=True):
     c1, c2, c3 = st.columns([3.2, 1.4, 1.4], vertical_alignment="bottom")
     keyword = c1.text_input("Keyword", max_chars=8, placeholder="Optional, e.g. IRL, LP or 007")
-    quantity = c2.number_input("Quantity", min_value=1, max_value=5000, value=20, step=10)
+    quantity = c2.number_input("Quantity", min_value=1, max_value=5000, value=20, step=1)
     submitted = c3.form_submit_button("Generate", type="primary", width="stretch")
-st.caption("The keyword is placed inside every hostname. Leave it empty for fully random names.")
+st.caption("The keyword is placed inside every hostname. Leave it empty for fully random names. "
+           "Quantity: 1 to 5,000.")
 
 if submitted:
     kw = hn.clean_keyword(keyword)
